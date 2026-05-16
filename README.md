@@ -63,6 +63,10 @@ cmake -S . -B build \
 Without that flag, the plugin builds with `NullDmxBackend` and the
 status panel will say so.
 
+For per-OS instructions (driver install, releasing the device from
+VCP / `ftdi_sio` / `AppleUSBFTDI`, udev rules, common failure modes),
+see [`docs/HARDWARE_SETUP.md`](docs/HARDWARE_SETUP.md).
+
 ## License
 
 GPLv3, inherited from Garage-Lights. See `LICENSE.txt`.
