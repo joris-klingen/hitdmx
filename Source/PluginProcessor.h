@@ -1,9 +1,8 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
-#include <memory>
 
-#include "Dmx/DmxBackend.h"
+#include "EnttecProDmx.h"
 
 namespace hitdmx
 {
@@ -40,7 +39,7 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState& getParameters() noexcept      { return parameters; }
-    DmxBackend& getDmxBackend() noexcept                              { return *dmxBackend; }
+    EnttecProDmx& getDmx() noexcept                                   { return dmx; }
 
     // UI state. Not stored in the parameter tree because they are not host-automatable.
     int  channelPage = 1;
@@ -55,7 +54,7 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
     juce::AudioProcessorValueTreeState parameters;
-    std::unique_ptr<DmxBackend> dmxBackend;
+    EnttecProDmx dmx;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HitDmxAudioProcessor)
 };

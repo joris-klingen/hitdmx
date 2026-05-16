@@ -1,8 +1,8 @@
-#include "EnttecProBackend.h"
-
-#if HITDMX_HAVE_FTDI_D2XX
+#include "EnttecProDmx.h"
 
 #include <ftd2xx.h>
+
+#include <cstring>
 
 namespace hitdmx
 {
@@ -30,34 +30,34 @@ namespace
     #pragma pack(pop)
 }
 
-EnttecProBackend::EnttecProBackend()
+EnttecProDmx::EnttecProDmx()
 {
-    dmxData.fill(0);
-    blackoutData.fill(0);
+    dmxData.fill (0);
+    blackoutData.fill (0);
     scanDevices();
 }
 
-EnttecProBackend::~EnttecProBackend()
+EnttecProDmx::~EnttecProDmx()
 {
     stopTimer();
     disconnect();
 }
 
-int EnttecProBackend::scanDevices()
+int EnttecProDmx::scanDevices()
 {
     DWORD count = 0;
-    auto status = FT_ListDevices((PVOID)(uintptr_t) &count, nullptr, FT_LIST_NUMBER_ONLY);
+    auto status = FT_ListDevices ((PVOID)(uintptr_t) &count, nullptr, FT_LIST_NUMBER_ONLY);
     numDevicesDetected = (status == FT_OK) ? (int) count : 0;
     return numDevicesDetected;
 }
 
-bool EnttecProBackend::connect()
+bool EnttecProDmx::connect()
 {
     if (connected.load())
         return true;
 
     FT_HANDLE handle = nullptr;
-    if (FT_Open(0, &handle) != FT_OK)
+    if (FT_Open (0, &handle) != FT_OK)
     {
         lastError = "Could not open FTDI device.";
         return false;
@@ -65,17 +65,17 @@ bool EnttecProBackend::connect()
     deviceHandle = handle;
 
     UCHAR lat = 0;
-    FT_GetLatencyTimer(handle, &lat);
+    FT_GetLatencyTimer (handle, &lat);
     latencyTimer = lat;
 
-    FT_SetTimeouts(handle, 120, 100);
-    FT_Purge(handle, FT_PURGE_RX);
+    FT_SetTimeouts (handle, 120, 100);
+    FT_Purge (handle, FT_PURGE_RX);
 
     int size = 0;
-    if (sendPacket(GET_WIDGET_PARAMS, reinterpret_cast<unsigned char*>(&size), 2) <= 0)
+    if (sendPacket (GET_WIDGET_PARAMS, reinterpret_cast<unsigned char*> (&size), 2) <= 0)
     {
-        FT_Purge(handle, FT_PURGE_TX);
-        if (sendPacket(GET_WIDGET_PARAMS, reinterpret_cast<unsigned char*>(&size), 2) <= 0)
+        FT_Purge (handle, FT_PURGE_TX);
+        if (sendPacket (GET_WIDGET_PARAMS, reinterpret_cast<unsigned char*> (&size), 2) <= 0)
         {
             closePort();
             lastError = "ENTTEC widget did not respond to GET_WIDGET_PARAMS.";
@@ -84,13 +84,13 @@ bool EnttecProBackend::connect()
     }
 
     DmxUsbProParams params {};
-    if (receivePacket(GET_WIDGET_PARAMS_REPLY,
-                      reinterpret_cast<unsigned char*>(&params),
-                      sizeof(params)) <= 0)
+    if (receivePacket (GET_WIDGET_PARAMS_REPLY,
+                       reinterpret_cast<unsigned char*> (&params),
+                       sizeof (params)) <= 0)
     {
-        if (receivePacket(GET_WIDGET_PARAMS_REPLY,
-                          reinterpret_cast<unsigned char*>(&params),
-                          sizeof(params)) <= 0)
+        if (receivePacket (GET_WIDGET_PARAMS_REPLY,
+                           reinterpret_cast<unsigned char*> (&params),
+                           sizeof (params)) <= 0)
         {
             closePort();
             lastError = "ENTTEC widget did not return parameter reply.";
@@ -102,37 +102,37 @@ bool EnttecProBackend::connect()
     firmwareMinor = params.FirmwareLSB;
     refreshRate   = params.RefreshRate;
 
-    connected.store(true);
+    connected.store (true);
     lastError = {};
-    startTimerHz(40);
+    startTimerHz (40);
     return true;
 }
 
-void EnttecProBackend::disconnect()
+void EnttecProDmx::disconnect()
 {
     stopTimer();
     closePort();
-    connected.store(false);
+    connected.store (false);
     scanDevices();
 }
 
-void EnttecProBackend::closePort()
+void EnttecProDmx::closePort()
 {
     if (deviceHandle != nullptr)
     {
-        FT_Close(static_cast<FT_HANDLE>(deviceHandle));
+        FT_Close (static_cast<FT_HANDLE> (deviceHandle));
         deviceHandle = nullptr;
     }
 }
 
-juce::String EnttecProBackend::getStatusText() const
+juce::String EnttecProDmx::getStatusText() const
 {
     if (connected.load())
     {
         return "Connected. Firmware "
-             + juce::String(firmwareMajor) + "." + juce::String(firmwareMinor)
-             + "\nRefresh rate: " + juce::String(refreshRate)
-             + "\nLatency: " + juce::String(latencyTimer);
+             + juce::String (firmwareMajor) + "." + juce::String (firmwareMinor)
+             + "\nRefresh rate: " + juce::String (refreshRate)
+             + "\nLatency: " + juce::String (latencyTimer);
     }
 
     if (! lastError.isEmpty())
@@ -142,19 +142,19 @@ juce::String EnttecProBackend::getStatusText() const
         return "No FTDI-compatible devices found. Plug in an ENTTEC DMX USB Pro and retry.";
     if (numDevicesDetected == 1)
         return "Found a compatible device. Click \"Connect USB\" to open it.";
-    return "Found " + juce::String(numDevicesDetected)
+    return "Found " + juce::String (numDevicesDetected)
          + " compatible devices. Please leave only one connected.";
 }
 
-void EnttecProBackend::setChannel(int channel, juce::uint8 value)
+void EnttecProDmx::setChannel (int channel, juce::uint8 value)
 {
     if (channel < 1 || channel > kDmxUniverseSize)
         return;
-    const juce::ScopedLock lock(dataLock);
+    const juce::ScopedLock lock (dataLock);
     dmxData[(size_t) channel] = value;
 }
 
-void EnttecProBackend::timerCallback()
+void EnttecProDmx::timerCallback()
 {
     if (! connected.load())
         return;
@@ -162,22 +162,22 @@ void EnttecProBackend::timerCallback()
     if (! sendDmxFrame())
     {
         closePort();
-        connected.store(false);
+        connected.store (false);
     }
 }
 
-bool EnttecProBackend::sendDmxFrame()
+bool EnttecProDmx::sendDmxFrame()
 {
     const bool useBlackout = blackout.load();
     std::array<unsigned char, kDataLen> snapshot;
     {
-        const juce::ScopedLock lock(dataLock);
+        const juce::ScopedLock lock (dataLock);
         snapshot = useBlackout ? blackoutData : dmxData;
     }
-    return sendPacket(SET_DMX_TX_MODE, snapshot.data(), kDataLen) > 0;
+    return sendPacket (SET_DMX_TX_MODE, snapshot.data(), kDataLen) > 0;
 }
 
-int EnttecProBackend::sendPacket(int label, const unsigned char* data, int length)
+int EnttecProDmx::sendPacket (int label, const unsigned char* data, int length)
 {
     if (deviceHandle == nullptr)
         return 0;
@@ -189,25 +189,25 @@ int EnttecProBackend::sendPacket(int label, const unsigned char* data, int lengt
     header[3] = (unsigned char) (length >> 8);
 
     DWORD written = 0;
-    auto handle = static_cast<FT_HANDLE>(deviceHandle);
+    auto handle = static_cast<FT_HANDLE> (deviceHandle);
 
-    if (FT_Write(handle, header, HEADER_LENGTH, &written) != FT_OK || (int) written != HEADER_LENGTH)
+    if (FT_Write (handle, header, HEADER_LENGTH, &written) != FT_OK || (int) written != HEADER_LENGTH)
         return 0;
-    if (FT_Write(handle, const_cast<unsigned char*>(data), (DWORD) length, &written) != FT_OK
+    if (FT_Write (handle, const_cast<unsigned char*> (data), (DWORD) length, &written) != FT_OK
         || (int) written != length)
         return 0;
     unsigned char endCode = DMX_END_CODE;
-    if (FT_Write(handle, &endCode, 1, &written) != FT_OK || written != 1)
+    if (FT_Write (handle, &endCode, 1, &written) != FT_OK || written != 1)
         return 0;
     return 1;
 }
 
-int EnttecProBackend::receivePacket(int label, unsigned char* data, unsigned int expectedLength)
+int EnttecProDmx::receivePacket (int label, unsigned char* data, unsigned int expectedLength)
 {
     if (deviceHandle == nullptr)
         return 0;
 
-    auto handle = static_cast<FT_HANDLE>(deviceHandle);
+    auto handle = static_cast<FT_HANDLE> (deviceHandle);
     unsigned char byte = 0;
     DWORD bytesRead = 0;
     unsigned char buffer[600];
@@ -216,38 +216,32 @@ int EnttecProBackend::receivePacket(int label, unsigned char* data, unsigned int
     {
         while (byte != DMX_START_CODE)
         {
-            if (FT_Read(handle, &byte, 1, &bytesRead) != FT_OK || bytesRead == 0)
+            if (FT_Read (handle, &byte, 1, &bytesRead) != FT_OK || bytesRead == 0)
                 return 0;
         }
-        if (FT_Read(handle, &byte, 1, &bytesRead) != FT_OK || bytesRead == 0)
+        if (FT_Read (handle, &byte, 1, &bytesRead) != FT_OK || bytesRead == 0)
             return 0;
     }
 
     unsigned int length = 0;
-    if (FT_Read(handle, &byte, 1, &bytesRead) != FT_OK || bytesRead == 0)
+    if (FT_Read (handle, &byte, 1, &bytesRead) != FT_OK || bytesRead == 0)
         return 0;
     length = byte;
-    if (FT_Read(handle, &byte, 1, &bytesRead) != FT_OK)
+    if (FT_Read (handle, &byte, 1, &bytesRead) != FT_OK)
         return 0;
     length += ((unsigned int) byte) << 8;
 
     if (length > (unsigned int) MAX_PACKET_SIZE)
         return 0;
-    if (FT_Read(handle, buffer, length, &bytesRead) != FT_OK || bytesRead != length)
+    if (FT_Read (handle, buffer, length, &bytesRead) != FT_OK || bytesRead != length)
         return 0;
-    if (FT_Read(handle, &byte, 1, &bytesRead) != FT_OK || bytesRead == 0)
+    if (FT_Read (handle, &byte, 1, &bytesRead) != FT_OK || bytesRead == 0)
         return 0;
     if (byte != DMX_END_CODE)
         return 0;
 
-    std::memcpy(data, buffer, expectedLength);
+    std::memcpy (data, buffer, expectedLength);
     return 1;
 }
 
 }
-
-#else
-
-// FTDI D2XX not available; this translation unit intentionally compiles to nothing.
-
-#endif

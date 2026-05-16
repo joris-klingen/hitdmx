@@ -114,7 +114,7 @@ void HitDmxAudioProcessorEditor::resized() {}
 
 void HitDmxAudioProcessorEditor::buttonClicked (juce::Button* button)
 {
-    auto& dmx = processor.getDmxBackend();
+    auto& dmx = processor.getDmx();
 
     if (button == &connectUsbButton)
     {
@@ -171,7 +171,7 @@ void HitDmxAudioProcessorEditor::changePage (int direction)
 
 void HitDmxAudioProcessorEditor::refreshConsoleText()
 {
-    auto& dmx = processor.getDmxBackend();
+    auto& dmx = processor.getDmx();
 
     if (connectAttempt)
     {
@@ -185,7 +185,7 @@ void HitDmxAudioProcessorEditor::refreshConsoleText()
 void HitDmxAudioProcessorEditor::timerCallback()
 {
     // Rescan + refresh the status panel periodically so the user sees device hot-plug.
-    processor.getDmxBackend().scanDevices();
+    processor.getDmx().scanDevices();
     repaint();
 }
 

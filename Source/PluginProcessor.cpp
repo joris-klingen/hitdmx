@@ -28,8 +28,7 @@ HitDmxAudioProcessor::HitDmxAudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      parameters (*this, nullptr, "DmxUniverse", createParameterLayout()),
-      dmxBackend (DmxBackend::createDefault())
+      parameters (*this, nullptr, "DmxUniverse", createParameterLayout())
 {
     for (int i = 1; i <= kDmxUniverseSize; ++i)
         parameters.addParameterListener (paramIdForChannel (i), this);
@@ -40,8 +39,7 @@ HitDmxAudioProcessor::~HitDmxAudioProcessor()
     for (int i = 1; i <= kDmxUniverseSize; ++i)
         parameters.removeParameterListener (paramIdForChannel (i), this);
 
-    if (dmxBackend != nullptr)
-        dmxBackend->disconnect();
+    dmx.disconnect();
 }
 
 void HitDmxAudioProcessor::prepareToPlay (double, int) {}
@@ -81,12 +79,10 @@ void HitDmxAudioProcessor::setStateInformation (const void* data, int sizeInByte
 
 void HitDmxAudioProcessor::parameterChanged (const juce::String& parameterID, float newValue)
 {
-    // IDs are "chN"; strip the leading "ch".
     if (! parameterID.startsWith ("ch"))
         return;
     const int channel = parameterID.substring (2).getIntValue();
-    if (dmxBackend != nullptr)
-        dmxBackend->setChannel (channel, (juce::uint8) juce::jlimit (0, 255, (int) newValue));
+    dmx.setChannel (channel, (juce::uint8) juce::jlimit (0, 255, (int) newValue));
 }
 
 }
