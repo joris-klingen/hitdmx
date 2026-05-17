@@ -46,9 +46,14 @@ cmake --build build --config Release
 ```
 
 `HITDMX_FTDI_D2XX_DIR` should be the directory containing `ftd2xx.h`
-and `libftd2xx.dylib` (either directly or in `include/` and `lib/`
+and `libftd2xx.a` (either directly or in `include/` and `lib/`
 subdirectories). `/usr/local` is the default and matches the install
 location in the hardware setup guide.
+
+FTDI's library is **statically linked** into the plugin: the resulting
+`.vst3` is self-contained and does not depend on `libftd2xx.dylib` at
+runtime. You can copy it between machines without installing any FTDI
+runtime on the destination.
 
 The VST3 is at `build/HitDmx_artefacts/Release/VST3/HitDmx.vst3`.
 

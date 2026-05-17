@@ -11,13 +11,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(HITDMX_FTDI_D2XX_DIR "/usr/local" CACHE PATH
-    "Path to FTDI D2XX SDK (containing ftd2xx.h and libftd2xx.dylib, \
+    "Path to FTDI D2XX SDK (containing ftd2xx.h and libftd2xx.a, \
 either directly or in include/ and lib/ subdirectories).")
 
 find_path(HITDMX_FTD2XX_INCLUDE_DIR ftd2xx.h
     HINTS "${HITDMX_FTDI_D2XX_DIR}" "${HITDMX_FTDI_D2XX_DIR}/include"
     REQUIRED)
-find_library(HITDMX_FTD2XX_LIBRARY NAMES ftd2xx
+find_file(HITDMX_FTD2XX_LIBRARY libftd2xx.a
     HINTS "${HITDMX_FTDI_D2XX_DIR}" "${HITDMX_FTDI_D2XX_DIR}/lib"
     REQUIRED)
 
@@ -67,6 +67,8 @@ target_compile_definitions(HitDmx PRIVATE
 
 target_link_libraries(HitDmx PRIVATE
     "${HITDMX_FTD2XX_LIBRARY}"
+    "-framework IOKit"
+    "-framework CoreFoundation"
     juce::juce_audio_utils
     juce::juce_audio_processors
     juce::juce_gui_basics

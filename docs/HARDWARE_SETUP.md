@@ -1,55 +1,55 @@
 # Hardware setup: ENTTEC DMX USB Pro on macOS
 
-HitDmx talks to the ENTTEC DMX USB Pro through FTDI's **D2XX** API — a
-packet-level interface to the FT232 chip inside the widget. macOS's
-built-in `AppleUSBFTDI` driver claims the device by default and must
-release it before D2XX can open it.
+HitDmx talks to the ENTTEC DMX USB Pro through FTDI's **D2XX** API. The
+FTDI library is **statically linked** into the plugin, so the finished
+`.vst3` is self-contained — there is no `libftd2xx.dylib` to install,
+sign, or distribute, and HitDmx does not depend on anything in
+`/usr/local/lib` at runtime.
 
-Setup has two steps:
+You only need FTDI's SDK at **build time** (for the `.a` and header) and
+you need to make sure macOS releases the device so the plugin can open
+it.
 
-1. Install FTDI's D2XX driver + the `D2XXHelper` system extension that
-   hands off the device from `AppleUSBFTDI` to D2XX.
-2. Drop the `libftd2xx.dylib` and `ftd2xx.h` somewhere the build can
-   find them.
+## At a glance
 
-## Install
+1. Download FTDI's macOS D2XX driver, extract the tarball.
+2. Drop `libftd2xx.a` and `ftd2xx.h` somewhere the build can find them.
+3. Build HitDmx.
+4. Install the `.vst3` and let your DAW load it.
 
-1. Download the **macOS** D2XX driver from
-   <https://ftdichip.com/drivers/d2xx-drivers/>. The tarball contains
-   a `D2XXHelper.pkg` installer plus `ftd2xx.h`, `WinTypes.h`, and a
-   `libftd2xx.<version>.dylib`.
+Modern (universal-binary, 2020+) FTDI builds detach the
+`AppleUSBFTDI` system driver via IOKit from inside `libftd2xx`. If the
+tarball you downloaded includes `D2XXHelper.pkg`, install it; if it
+doesn't, skip — newer builds handle the hand-off internally.
 
-2. Run `D2XXHelper.pkg`.
+## Install the SDK
 
-3. Approve the system extension in **System Settings → Privacy &
-   Security**. You may see *"System software from FTDI was blocked"*
-   → click **Allow**.
+Download the **macOS** D2XX driver from
+<https://ftdichip.com/drivers/d2xx-drivers/>. The archive contains
+`ftd2xx.h`, `WinTypes.h`, `libftd2xx.<version>.dylib`, and
+`libftd2xx.a`.
 
-4. Reboot. Without this, `AppleUSBFTDI` will keep the device and
-   `FT_Open` will fail.
+If present, run `D2XXHelper.pkg` and approve the FTDI system extension
+in **System Settings → Privacy & Security**. Reboot. If it isn't in the
+tarball, skip this step.
 
-5. Install the library and header to `/usr/local` so the default
-   `HITDMX_FTDI_D2XX_DIR=/usr/local` finds them:
+Place the build dependencies somewhere the default CMake config picks
+them up (`/usr/local`):
 
-   ```
-   sudo mkdir -p /usr/local/include /usr/local/lib
-   sudo cp ftd2xx.h WinTypes.h /usr/local/include/
-   sudo cp libftd2xx.*.dylib /usr/local/lib/
-   sudo ln -sf /usr/local/lib/libftd2xx.*.dylib /usr/local/lib/libftd2xx.dylib
-   sudo install_name_tool -id /usr/local/lib/libftd2xx.dylib \
-       /usr/local/lib/libftd2xx.dylib
-   ```
+```
+sudo mkdir -p /usr/local/include /usr/local/lib
+sudo cp ftd2xx.h WinTypes.h /usr/local/include/
+sudo cp libftd2xx.a /usr/local/lib/
+```
 
-6. On **Apple Silicon**, make sure the dylib you installed is a
-   universal or `arm64` build (recent FTDI releases ship a universal
-   binary):
+On **Apple Silicon**, verify `libftd2xx.a` covers `arm64`:
 
-   ```
-   file /usr/local/lib/libftd2xx.dylib
-   ```
+```
+lipo -info /usr/local/lib/libftd2xx.a
+```
 
-   should say `Mach-O universal binary` or `arm64`. An x86_64-only
-   dylib will not link against an arm64 host build of the plugin.
+It should list `arm64` (or be `Mach-O universal`). An x86_64-only
+archive will fail to link against an arm64 host build.
 
 ## Build
 
@@ -58,23 +58,31 @@ cmake -S . -B build -G Xcode -DHITDMX_FTDI_D2XX_DIR=/usr/local
 cmake --build build --config Release
 ```
 
-Verify the plugin links against the real library:
+The plugin is at
+`build/HitDmx_artefacts/Release/VST3/HitDmx.vst3`.
+
+Verify the result is self-contained — there should be **no**
+`libftd2xx` line in `otool -L`:
 
 ```
 otool -L build/HitDmx_artefacts/Release/VST3/HitDmx.vst3/Contents/MacOS/HitDmx
 ```
 
-The `libftd2xx.dylib` line should resolve to `/usr/local/lib/...`.
+Only system frameworks (`CoreFoundation`, `IOKit`, `AppKit`, etc.) and
+the C++ runtime should appear.
 
-## Code signing / hosts
+## Install the plugin
 
-Hosts that sandbox plugins heavily (Logic, GarageBand) refuse to load
-unsigned/un-notarized plugins, and reject any plugin that loads an
-unsigned third-party dylib. For local development, either:
+```
+mkdir -p ~/Library/Audio/Plug-Ins/VST3
+cp -R build/HitDmx_artefacts/Release/VST3/HitDmx.vst3 \
+      ~/Library/Audio/Plug-Ins/VST3/
+```
 
-- Run the host with `--disable-library-validation`, or
-- Sign the plugin and the `libftd2xx.dylib` yourself with your
-  Developer ID.
+Because the FTDI code is statically linked, **no library-validation
+workarounds are needed**: Logic / GarageBand will load HitDmx the same
+as any other VST3, provided the bundle itself is signed (or you have
+library validation disabled host-wide).
 
 ## Validating end-to-end
 
@@ -82,21 +90,21 @@ With the device connected:
 
 1. Open the plugin in your DAW.
 2. The status panel should report `Found a compatible device.`
-3. Click **Connect USB**. On success the panel changes to
-   `Connected. Firmware <major>.<minor>` with the device refresh rate
+3. Click **Connect USB**. On success it changes to
+   `Connected. Firmware <major>.<minor>` plus the device refresh rate
    and latency.
-4. Move Channel 1's slider. If you have a fixture patched to address 1,
-   it should respond live.
+4. Move Channel 1's slider. A fixture patched to address 1 should
+   respond live.
 
-If `Connect` succeeds but no light reacts, the issue is downstream of
-the plugin — XLR wiring, fixture address, or the **Blackout** button
-still being on. Check the GUI state first.
+If `Connect` succeeds but no light reacts, the issue is downstream —
+XLR wiring, fixture address, or the **Blackout** button. Check the GUI
+state first.
 
 ## Common symptoms
 
-| Symptom in the status panel                                          | Likely cause                                                       |
-|----------------------------------------------------------------------|--------------------------------------------------------------------|
-| "No FTDI-compatible devices found." with the widget plugged in       | `D2XXHelper` not installed, or not approved in System Settings.    |
-| "Could not open FTDI device."                                        | `AppleUSBFTDI` still has the device. Reboot after installing.      |
-| "Found a compatible device" but `Connect` fails immediately          | Library architecture mismatch (x86_64 dylib loaded by arm64 host). |
-| Host refuses to load the plugin at all                                | Library validation; sign the dylib or disable validation in the host. |
+| Symptom in the status panel                                          | Likely cause                                                            |
+|----------------------------------------------------------------------|-------------------------------------------------------------------------|
+| "No FTDI-compatible devices found." with the widget plugged in       | Older `libftd2xx.a` that still needs `D2XXHelper`. Install it and reboot. |
+| "Could not open FTDI device."                                        | `AppleUSBFTDI` is holding the device. Reboot after the driver install.  |
+| Build fails: "could not find ftd2xx.h" or "could not find libftd2xx.a"| `HITDMX_FTDI_D2XX_DIR` is wrong; point it at the directory containing them. |
+| Plugin loads but `Connect` errors out on Apple Silicon                | `libftd2xx.a` is x86_64 only; download the universal/arm64 build.       |
