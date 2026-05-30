@@ -55,7 +55,9 @@ FTDI's library is **statically linked** into the plugin: the resulting
 runtime. You can copy it between machines without installing any FTDI
 runtime on the destination.
 
-The VST3 is at `build/HitDmx_artefacts/Release/VST3/HitDmx.vst3`.
+The VST3 is at `build/HitDmx_artefacts/Release/VST3/HitDmx.vst3`, and
+the build also copies it to `~/Library/Audio/Plug-Ins/VST3/`
+automatically so your DAW picks it up on the next rescan.
 
 ## License
 

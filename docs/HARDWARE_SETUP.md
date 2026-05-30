@@ -73,11 +73,16 @@ the C++ runtime should appear.
 
 ## Install the plugin
 
-```
-mkdir -p ~/Library/Audio/Plug-Ins/VST3
-cp -R build/HitDmx_artefacts/Release/VST3/HitDmx.vst3 \
-      ~/Library/Audio/Plug-Ins/VST3/
-```
+The build automatically copies `HitDmx.vst3` to
+`~/Library/Audio/Plug-Ins/VST3/` as a post-build step (JUCE's
+`COPY_PLUGIN_AFTER_BUILD`), so a successful `cmake --build` is also a
+successful install. Restart your DAW (or trigger a plugin rescan) to
+pick up the new build.
+
+To install system-wide instead (`/Library/Audio/Plug-Ins/VST3`, all
+users), copy it manually with `sudo` — the automatic copy targets the
+user folder by design so the build does not require elevated
+permissions.
 
 Because the FTDI code is statically linked, **no library-validation
 workarounds are needed**: Logic / GarageBand will load HitDmx the same
