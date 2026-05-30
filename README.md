@@ -1,4 +1,4 @@
-# HitDmx
+# hitdmx
 
 A macOS VST3 plugin that exposes a full DMX-512 universe as
 host-automatable parameters, so you can drive lighting from a DAW
@@ -56,7 +56,7 @@ macOS system frameworks, so the resulting `.vst3` is self-contained
 and links no third-party libraries. You can copy it between machines
 without installing any runtime on the destination.
 
-The VST3 is at `build/HitDmx_artefacts/Release/VST3/HitDmx.vst3`, and
+The VST3 is at `build/hitdmx_artefacts/Release/VST3/hitdmx.vst3`, and
 the build also copies it to `~/Library/Audio/Plug-Ins/VST3/`
 automatically so your DAW picks it up on the next rescan.
 
