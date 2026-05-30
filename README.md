@@ -25,9 +25,13 @@ hardcoded developer paths.
     `namespace hitdmx`.
 - **ENTTEC USB Pro driver**: protocol code moved into
   `Source/EnttecProDmx.{h,cpp}`, cleaned up, and freed of its hardcoded
-  `C:/Users/Spenser/...` library path.
+  `C:/Users/Spenser/...` library path. Device I/O no longer uses the
+  proprietary FTDI **D2XX** SDK: the widget is reached over its USB
+  serial (VCP) port using only macOS system frameworks — IOKit for
+  discovery and POSIX `termios` for I/O. There is nothing to download
+  or install, and the build links no third-party libraries.
 - **Thread safety**: the DMX send buffer is updated under a
-  `CriticalSection`; the FTDI timer callback takes a snapshot before
+  `CriticalSection`; the timer callback takes a snapshot before
   writing.
 - **GUI**: same layout and look, but split into `GuiParams.{h,cpp}`,
   page change made safe against out-of-range indices, and a polling
@@ -35,25 +39,22 @@ hardcoded developer paths.
 
 ## Building
 
-Requires CMake 3.22+, Xcode, and the FTDI D2XX SDK installed (see
-[`docs/HARDWARE_SETUP.md`](docs/HARDWARE_SETUP.md)). JUCE is fetched
-automatically.
+Requires CMake 3.22+ and Xcode (or the Command Line Tools). JUCE is
+fetched automatically; there are no other dependencies (see
+[`docs/HARDWARE_SETUP.md`](docs/HARDWARE_SETUP.md)).
 
 ```
-cmake -S . -B build -G Xcode \
-  -DHITDMX_FTDI_D2XX_DIR=/usr/local
+cmake -S . -B build -G Xcode
 cmake --build build --config Release
 ```
 
-`HITDMX_FTDI_D2XX_DIR` should be the directory containing `ftd2xx.h`
-and `libftd2xx.a` (either directly or in `include/` and `lib/`
-subdirectories). `/usr/local` is the default and matches the install
-location in the hardware setup guide.
+`-G Xcode` is optional — the default generator (or `-G "Unix
+Makefiles"`) works just as well.
 
-FTDI's library is **statically linked** into the plugin: the resulting
-`.vst3` is self-contained and does not depend on `libftd2xx.dylib` at
-runtime. You can copy it between machines without installing any FTDI
-runtime on the destination.
+The plugin talks to the widget over its USB serial port using only
+macOS system frameworks, so the resulting `.vst3` is self-contained
+and links no third-party libraries. You can copy it between machines
+without installing any runtime on the destination.
 
 The VST3 is at `build/HitDmx_artefacts/Release/VST3/HitDmx.vst3`, and
 the build also copies it to `~/Library/Audio/Plug-Ins/VST3/`

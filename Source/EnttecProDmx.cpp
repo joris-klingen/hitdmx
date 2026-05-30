@@ -1,8 +1,18 @@
 #include "EnttecProDmx.h"
 
-#include <ftd2xx.h>
-
+#include <cerrno>
 #include <cstring>
+
+#include <fcntl.h>
+#include <termios.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+
+#include <CoreFoundation/CoreFoundation.h>
+#include <IOKit/IOKitLib.h>
+#include <IOKit/IOBSD.h>
+#include <IOKit/serial/IOSerialKeys.h>
+#include <IOKit/serial/ioss.h>
 
 namespace hitdmx
 {
@@ -13,10 +23,21 @@ namespace
     constexpr int GET_WIDGET_PARAMS       = 3;
     constexpr int GET_WIDGET_PARAMS_REPLY = 3;
     constexpr int SET_DMX_TX_MODE         = 6;
-    constexpr unsigned char DMX_START_CODE = 0x7E;
-    constexpr unsigned char DMX_END_CODE   = 0xE7;
+    constexpr unsigned char MSG_START_CODE = 0x7E;
+    constexpr unsigned char MSG_END_CODE   = 0xE7;
     constexpr int HEADER_LENGTH = 4;
     constexpr int MAX_PACKET_SIZE = 512;
+
+    // The widget runs on an FTDI bridge; the host-side baud is effectively
+    // ignored by the device, but a sane value must still be configured.
+    constexpr speed_t kBaudRate = 57600;
+
+    // The ENTTEC DMX USB Pro enumerates its USB serial callout device as
+    // /dev/cu.usbserial-EN<serial>. We match on that prefix.
+    bool isEnttecCalloutPath (const std::string& path)
+    {
+        return path.find ("usbserial-EN") != std::string::npos;
+    }
 
     #pragma pack(push, 1)
     struct DmxUsbProParams
@@ -28,6 +49,43 @@ namespace
         unsigned char RefreshRate;
     };
     #pragma pack(pop)
+
+    // Enumerate all serial callout devices (/dev/cu.*) via IOKit.
+    std::vector<std::string> listSerialCalloutDevices()
+    {
+        std::vector<std::string> paths;
+
+        CFMutableDictionaryRef match = IOServiceMatching (kIOSerialBSDServiceValue);
+        if (match == nullptr)
+            return paths;
+
+        CFDictionarySetValue (match,
+                              CFSTR (kIOSerialBSDTypeKey),
+                              CFSTR (kIOSerialBSDAllTypes));
+
+        io_iterator_t iterator = IO_OBJECT_NULL;
+        if (IOServiceGetMatchingServices (kIOMasterPortDefault, match, &iterator) != KERN_SUCCESS)
+            return paths;
+
+        io_object_t service = IO_OBJECT_NULL;
+        while ((service = IOIteratorNext (iterator)) != IO_OBJECT_NULL)
+        {
+            if (auto cfPath = (CFStringRef) IORegistryEntryCreateCFProperty (
+                    service, CFSTR (kIOCalloutDeviceKey), kCFAllocatorDefault, 0))
+            {
+                char buffer[1024] = { 0 };
+                if (CFStringGetCString (cfPath, buffer, sizeof (buffer), kCFStringEncodingUTF8))
+                    paths.emplace_back (buffer);
+
+                CFRelease (cfPath);
+            }
+
+            IOObjectRelease (service);
+        }
+
+        IOObjectRelease (iterator);
+        return paths;
+    }
 }
 
 EnttecProDmx::EnttecProDmx()
@@ -45,10 +103,74 @@ EnttecProDmx::~EnttecProDmx()
 
 int EnttecProDmx::scanDevices()
 {
-    DWORD count = 0;
-    auto status = FT_ListDevices ((PVOID)(uintptr_t) &count, nullptr, FT_LIST_NUMBER_ONLY);
-    numDevicesDetected = (status == FT_OK) ? (int) count : 0;
+    int count = 0;
+    std::string firstMatch;
+
+    for (const auto& path : listSerialCalloutDevices())
+    {
+        if (isEnttecCalloutPath (path))
+        {
+            if (firstMatch.empty())
+                firstMatch = path;
+            ++count;
+        }
+    }
+
+    selectedDevicePath = firstMatch;
+    numDevicesDetected = count;
     return numDevicesDetected;
+}
+
+bool EnttecProDmx::openPort (const std::string& devicePath)
+{
+    int fd = ::open (devicePath.c_str(), O_RDWR | O_NOCTTY);
+    if (fd < 0)
+    {
+        lastError = "Could not open " + juce::String (devicePath)
+                  + " (" + juce::String (std::strerror (errno)) + ").";
+        return false;
+    }
+
+    struct termios options {};
+    if (tcgetattr (fd, &options) != 0)
+    {
+        lastError = "tcgetattr failed on the serial port.";
+        ::close (fd);
+        return false;
+    }
+
+    // 8 data bits, no parity, one stop bit, no flow control, raw mode.
+    options.c_cflag &= ~(tcflag_t) (PARENB | CSTOPB | CSIZE | CRTSCTS);
+    options.c_cflag |= (tcflag_t) (CS8 | CREAD | CLOCAL);
+
+    options.c_lflag &= ~(tcflag_t) (ICANON | ECHO | ECHOE | ECHONL | ISIG);
+    options.c_iflag &= ~(tcflag_t) (IXON | IXOFF | IXANY);
+    options.c_iflag &= ~(tcflag_t) (IGNBRK | BRKINT | PARMRK | ISTRIP
+                                    | INLCR | IGNCR | ICRNL);
+    options.c_oflag &= ~(tcflag_t) (OPOST | ONLCR);
+
+    // Block up to 0.1s per read() returning whatever bytes have arrived.
+    options.c_cc[VTIME] = 1;
+    options.c_cc[VMIN]  = 0;
+
+    if (tcsetattr (fd, TCSANOW, &options) != 0)
+    {
+        lastError = "tcsetattr failed on the serial port.";
+        ::close (fd);
+        return false;
+    }
+
+    // Set an arbitrary baud rate via the macOS-specific IOSSIOSPEED ioctl.
+    speed_t baud = kBaudRate;
+    if (ioctl (fd, IOSSIOSPEED, &baud) == -1)
+    {
+        lastError = "Could not set the serial baud rate.";
+        ::close (fd);
+        return false;
+    }
+
+    serialFd = fd;
+    return true;
 }
 
 bool EnttecProDmx::connect()
@@ -56,25 +178,23 @@ bool EnttecProDmx::connect()
     if (connected.load())
         return true;
 
-    FT_HANDLE handle = nullptr;
-    if (FT_Open (0, &handle) != FT_OK)
+    if (selectedDevicePath.empty())
+        scanDevices();
+
+    if (selectedDevicePath.empty())
     {
-        lastError = "Could not open FTDI device.";
+        lastError = "No ENTTEC DMX USB Pro serial port found.";
         return false;
     }
-    deviceHandle = handle;
 
-    UCHAR lat = 0;
-    FT_GetLatencyTimer (handle, &lat);
-    latencyTimer = lat;
+    if (! openPort (selectedDevicePath))
+        return false;
 
-    FT_SetTimeouts (handle, 120, 100);
-    FT_Purge (handle, FT_PURGE_RX);
+    tcflush (serialFd, TCIOFLUSH);
 
     int size = 0;
     if (sendPacket (GET_WIDGET_PARAMS, reinterpret_cast<unsigned char*> (&size), 2) <= 0)
     {
-        FT_Purge (handle, FT_PURGE_TX);
         if (sendPacket (GET_WIDGET_PARAMS, reinterpret_cast<unsigned char*> (&size), 2) <= 0)
         {
             closePort();
@@ -118,10 +238,10 @@ void EnttecProDmx::disconnect()
 
 void EnttecProDmx::closePort()
 {
-    if (deviceHandle != nullptr)
+    if (serialFd >= 0)
     {
-        FT_Close (static_cast<FT_HANDLE> (deviceHandle));
-        deviceHandle = nullptr;
+        ::close (serialFd);
+        serialFd = -1;
     }
 }
 
@@ -131,19 +251,18 @@ juce::String EnttecProDmx::getStatusText() const
     {
         return "Connected. Firmware "
              + juce::String (firmwareMajor) + "." + juce::String (firmwareMinor)
-             + "\nRefresh rate: " + juce::String (refreshRate)
-             + "\nLatency: " + juce::String (latencyTimer);
+             + "\nRefresh rate: " + juce::String (refreshRate);
     }
 
     if (! lastError.isEmpty())
         return lastError;
 
     if (numDevicesDetected == 0)
-        return "No FTDI-compatible devices found. Plug in an ENTTEC DMX USB Pro and retry.";
+        return "No ENTTEC DMX USB Pro found. Plug one in and retry.";
     if (numDevicesDetected == 1)
-        return "Found a compatible device. Click \"Connect USB\" to open it.";
+        return "Found an ENTTEC DMX USB Pro. Click \"Connect USB\" to open it.";
     return "Found " + juce::String (numDevicesDetected)
-         + " compatible devices. Please leave only one connected.";
+         + " ENTTEC devices. Please leave only one connected.";
 }
 
 void EnttecProDmx::setChannel (int channel, juce::uint8 value)
@@ -179,65 +298,91 @@ bool EnttecProDmx::sendDmxFrame()
 
 int EnttecProDmx::sendPacket (int label, const unsigned char* data, int length)
 {
-    if (deviceHandle == nullptr)
+    if (serialFd < 0)
         return 0;
 
-    unsigned char header[HEADER_LENGTH];
-    header[0] = DMX_START_CODE;
-    header[1] = (unsigned char) label;
-    header[2] = (unsigned char) (length & 0xFF);
-    header[3] = (unsigned char) (length >> 8);
+    // Assemble the full ENTTEC frame: start, label, len LSB/MSB, data, end.
+    std::vector<unsigned char> packet;
+    packet.reserve ((size_t) (HEADER_LENGTH + length + 1));
+    packet.push_back (MSG_START_CODE);
+    packet.push_back ((unsigned char) label);
+    packet.push_back ((unsigned char) (length & 0xFF));
+    packet.push_back ((unsigned char) ((length >> 8) & 0xFF));
+    packet.insert (packet.end(), data, data + length);
+    packet.push_back (MSG_END_CODE);
 
-    DWORD written = 0;
-    auto handle = static_cast<FT_HANDLE> (deviceHandle);
+    size_t total = packet.size();
+    size_t sent  = 0;
+    while (sent < total)
+    {
+        ssize_t n = ::write (serialFd, packet.data() + sent, total - sent);
+        if (n < 0)
+        {
+            if (errno == EINTR)
+                continue;
+            return 0;
+        }
+        if (n == 0)
+            return 0;
+        sent += (size_t) n;
+    }
 
-    if (FT_Write (handle, header, HEADER_LENGTH, &written) != FT_OK || (int) written != HEADER_LENGTH)
-        return 0;
-    if (FT_Write (handle, const_cast<unsigned char*> (data), (DWORD) length, &written) != FT_OK
-        || (int) written != length)
-        return 0;
-    unsigned char endCode = DMX_END_CODE;
-    if (FT_Write (handle, &endCode, 1, &written) != FT_OK || written != 1)
-        return 0;
     return 1;
+}
+
+bool EnttecProDmx::readByte (unsigned char& out)
+{
+    if (serialFd < 0)
+        return false;
+
+    for (;;)
+    {
+        ssize_t n = ::read (serialFd, &out, 1);
+        if (n == 1)
+            return true;
+        if (n < 0 && errno == EINTR)
+            continue;
+        return false;   // n == 0 (timeout) or hard error
+    }
 }
 
 int EnttecProDmx::receivePacket (int label, unsigned char* data, unsigned int expectedLength)
 {
-    if (deviceHandle == nullptr)
+    if (serialFd < 0)
         return 0;
 
-    auto handle = static_cast<FT_HANDLE> (deviceHandle);
     unsigned char byte = 0;
-    DWORD bytesRead = 0;
     unsigned char buffer[600];
 
     while (byte != (unsigned char) label)
     {
-        while (byte != DMX_START_CODE)
+        while (byte != MSG_START_CODE)
         {
-            if (FT_Read (handle, &byte, 1, &bytesRead) != FT_OK || bytesRead == 0)
+            if (! readByte (byte))
                 return 0;
         }
-        if (FT_Read (handle, &byte, 1, &bytesRead) != FT_OK || bytesRead == 0)
+        if (! readByte (byte))   // label byte
             return 0;
     }
 
     unsigned int length = 0;
-    if (FT_Read (handle, &byte, 1, &bytesRead) != FT_OK || bytesRead == 0)
+    if (! readByte (byte))
         return 0;
     length = byte;
-    if (FT_Read (handle, &byte, 1, &bytesRead) != FT_OK)
+    if (! readByte (byte))
         return 0;
     length += ((unsigned int) byte) << 8;
 
     if (length > (unsigned int) MAX_PACKET_SIZE)
         return 0;
-    if (FT_Read (handle, buffer, length, &bytesRead) != FT_OK || bytesRead != length)
-        return 0;
-    if (FT_Read (handle, &byte, 1, &bytesRead) != FT_OK || bytesRead == 0)
-        return 0;
-    if (byte != DMX_END_CODE)
+
+    for (unsigned int i = 0; i < length; ++i)
+    {
+        if (! readByte (buffer[i]))
+            return 0;
+    }
+
+    if (! readByte (byte) || byte != MSG_END_CODE)
         return 0;
 
     std::memcpy (data, buffer, expectedLength);

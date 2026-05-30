@@ -2,6 +2,8 @@
 
 #include <array>
 #include <atomic>
+#include <string>
+#include <vector>
 #include <juce_core/juce_core.h>
 #include <juce_events/juce_events.h>
 
@@ -10,8 +12,10 @@ namespace hitdmx
 
 inline constexpr int kDmxUniverseSize = 512;
 
-// Talks to an ENTTEC DMX USB Pro via the FTDI D2XX driver.
-// Send loop runs on a juce::Timer at the device refresh rate.
+// Talks to an ENTTEC DMX USB Pro over its USB serial (VCP) port using only
+// macOS system frameworks (IOKit for discovery, POSIX termios for I/O).
+// No FTDI D2XX SDK required, and the resulting plugin is self-contained.
+// The send loop runs on a juce::Timer at the device refresh rate.
 class EnttecProDmx : private juce::Timer
 {
 public:
@@ -33,9 +37,11 @@ public:
 private:
     void timerCallback() override;
 
+    bool openPort (const std::string& devicePath);
     bool sendDmxFrame();
     int  sendPacket (int label, const unsigned char* data, int length);
     int  receivePacket (int label, unsigned char* data, unsigned int expectedLength);
+    bool readByte (unsigned char& out);
     void closePort();
 
     std::atomic<bool> connected { false };
@@ -47,10 +53,10 @@ private:
     std::array<unsigned char, kDataLen> dmxData {};
     std::array<unsigned char, kDataLen> blackoutData {};
 
-    void* deviceHandle { nullptr };
+    int serialFd { -1 };
+    std::string selectedDevicePath;        // /dev/cu.usbserial-EN...
     int firmwareMajor { 0 }, firmwareMinor { 0 };
     int refreshRate { 0 };
-    int latencyTimer { 0 };
     juce::String lastError;
     juce::CriticalSection dataLock;
 };
