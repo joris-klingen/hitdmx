@@ -57,7 +57,7 @@ struct GuiParams
         juce::Colour (98, 110, 110)
     };
 
-    juce::String title  { "  HitDmx" };
+    juce::String title  { "  Flamingo Hitmix' dmx" };
     juce::String footer { "Based on Garage Lights (GPLv3)" };
 
     void drawBackground (juce::Graphics&, int colourId) const;
