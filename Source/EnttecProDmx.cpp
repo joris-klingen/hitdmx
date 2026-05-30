@@ -123,11 +123,21 @@ int EnttecProDmx::scanDevices()
 
 bool EnttecProDmx::openPort (const std::string& devicePath)
 {
-    int fd = ::open (devicePath.c_str(), O_RDWR | O_NOCTTY);
+    // O_NONBLOCK so the open itself never stalls waiting on modem control
+    // lines (a known FTDI-on-Apple-Silicon hang); we clear it again below so
+    // the handshake reads can honour VMIN/VTIME timeouts.
+    int fd = ::open (devicePath.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
     if (fd < 0)
     {
         lastError = "Could not open " + juce::String (devicePath)
                   + " (" + juce::String (std::strerror (errno)) + ").";
+        return false;
+    }
+
+    if (fcntl (fd, F_SETFL, 0) == -1)   // back to blocking I/O
+    {
+        lastError = "Could not configure the serial port (fcntl).";
+        ::close (fd);
         return false;
     }
 
@@ -168,6 +178,12 @@ bool EnttecProDmx::openPort (const std::string& devicePath)
         ::close (fd);
         return false;
     }
+
+    // Drop the FTDI latency timer to its minimum (1 ms). The default 16 ms
+    // buffering is the knob behind much of the FTDI-on-Apple-Silicon lag and
+    // the long drains on close. Best-effort: ignore if the driver rejects it.
+    unsigned long latency = 1;
+    ioctl (fd, IOSSDATALAT, &latency);
 
     serialFd = fd;
     return true;
@@ -240,6 +256,13 @@ void EnttecProDmx::closePort()
 {
     if (serialFd >= 0)
     {
+        // Discard any queued I/O and switch to non-blocking *before* close().
+        // On Apple Silicon, close() on an FTDI VCP port drains pending output
+        // through the kernel tty layer, which can stall on the USB pipe and
+        // hang the calling thread (i.e. freeze the host on quit). With nothing
+        // left to drain, close() returns immediately.
+        tcflush (serialFd, TCIOFLUSH);
+        fcntl (serialFd, F_SETFL, O_NONBLOCK);
         ::close (serialFd);
         serialFd = -1;
     }
