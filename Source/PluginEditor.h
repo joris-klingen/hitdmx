@@ -9,7 +9,7 @@
 #include "PluginProcessor.h"
 #include "GuiParams.h"
 
-namespace hitdmx
+namespace hitccdmx
 {
 
 class HitDmxAudioProcessorEditor  : public juce::AudioProcessorEditor,

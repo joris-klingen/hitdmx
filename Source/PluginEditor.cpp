@@ -1,6 +1,6 @@
 #include "PluginEditor.h"
 
-namespace hitdmx
+namespace hitccdmx
 {
 
 HitDmxAudioProcessorEditor::HitDmxAudioProcessorEditor (HitDmxAudioProcessor& p)

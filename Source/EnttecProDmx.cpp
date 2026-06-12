@@ -14,7 +14,7 @@
 #include <IOKit/serial/IOSerialKeys.h>
 #include <IOKit/serial/ioss.h>
 
-namespace hitdmx
+namespace hitccdmx
 {
 
 // ENTTEC USB Pro packet labels (see ENTTEC's "DMX USB Pro Widget API Specification").

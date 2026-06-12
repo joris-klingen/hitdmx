@@ -1,6 +1,6 @@
 # Hardware setup: ENTTEC DMX USB Pro on macOS
 
-hitdmx talks to the ENTTEC DMX USB Pro over its **USB serial (VCP)
+hitccdmx talks to the ENTTEC DMX USB Pro over its **USB serial (VCP)
 port**, using only macOS system frameworks — IOKit to discover the
 device and POSIX `termios` for I/O. There is **no FTDI D2XX SDK**, no
 `libftd2xx` to download or link, and nothing to install in
@@ -9,14 +9,14 @@ Apple Silicon.
 
 macOS ships its own FTDI serial driver (`AppleUSBFTDI`), so when you
 plug in the widget it appears as a callout device at
-`/dev/cu.usbserial-EN…`. hitdmx enumerates these via IOKit and opens
+`/dev/cu.usbserial-EN…`. hitccdmx enumerates these via IOKit and opens
 the matching one directly. No kernel extension, no `D2XXHelper.pkg`, no
 reboot, no system-extension approval.
 
 ## At a glance
 
 1. Plug in the ENTTEC DMX USB Pro.
-2. Build hitdmx (JUCE is fetched automatically; no other dependencies).
+2. Build hitccdmx (JUCE is fetched automatically; no other dependencies).
 3. Let your DAW load the `.vst3` and connect.
 
 ## Build
@@ -30,24 +30,24 @@ cmake --build build --config Release
 works just as well with the Command Line Tools.)
 
 The plugin is at
-`build/hitdmx_artefacts/Release/VST3/hitdmx.vst3`.
+`build/hitccdmx_artefacts/Release/VST3/hitccdmx.vst3`.
 
 Verify the result is self-contained — there should be **no**
 `libftd2xx` line, only system frameworks and the C++ runtime:
 
 ```
-otool -L build/hitdmx_artefacts/Release/VST3/hitdmx.vst3/Contents/MacOS/hitdmx
+otool -L build/hitccdmx_artefacts/Release/VST3/hitccdmx.vst3/Contents/MacOS/hitccdmx
 ```
 
 On **Apple Silicon**, confirm the binary is `arm64`:
 
 ```
-lipo -info build/hitdmx_artefacts/Release/VST3/hitdmx.vst3/Contents/MacOS/hitdmx
+lipo -info build/hitccdmx_artefacts/Release/VST3/hitccdmx.vst3/Contents/MacOS/hitccdmx
 ```
 
 ## Install the plugin
 
-The build automatically copies `hitdmx.vst3` to
+The build automatically copies `hitccdmx.vst3` to
 `~/Library/Audio/Plug-Ins/VST3/` as a post-build step (JUCE's
 `COPY_PLUGIN_AFTER_BUILD`), so a successful `cmake --build` is also a
 successful install. Restart your DAW (or trigger a plugin rescan) to
@@ -60,7 +60,7 @@ permissions.
 
 Because there is no third-party dynamic library, **no
 library-validation workarounds are needed**: Logic / GarageBand load
-hitdmx the same as any other VST3, provided the bundle itself is signed
+hitccdmx the same as any other VST3, provided the bundle itself is signed
 (the build applies an ad-hoc signature) or you have library validation
 disabled host-wide.
 

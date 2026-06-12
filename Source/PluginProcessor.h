@@ -4,7 +4,7 @@
 
 #include "EnttecProDmx.h"
 
-namespace hitdmx
+namespace hitccdmx
 {
 
 class HitDmxAudioProcessor  : public juce::AudioProcessor,

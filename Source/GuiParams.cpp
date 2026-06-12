@@ -1,6 +1,6 @@
 #include "GuiParams.h"
 
-namespace hitdmx
+namespace hitccdmx
 {
 
 GuiParams::GuiParams()

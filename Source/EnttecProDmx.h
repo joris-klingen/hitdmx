@@ -7,7 +7,7 @@
 #include <juce_core/juce_core.h>
 #include <juce_events/juce_events.h>
 
-namespace hitdmx
+namespace hitccdmx
 {
 
 inline constexpr int kDmxUniverseSize = 512;

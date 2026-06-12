@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(hitdmx VERSION 0.2.0 LANGUAGES C CXX)
+project(hitccdmx VERSION 0.2.0 LANGUAGES C CXX)
 
 if(NOT APPLE)
-    message(FATAL_ERROR "hitdmx targets macOS only. Build on a Mac.")
+    message(FATAL_ERROR "hitccdmx targets macOS only. Build on a Mac.")
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -19,14 +19,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(JUCE)
 
-juce_add_plugin(hitdmx
+juce_add_plugin(hitccdmx
     COMPANY_NAME                "hitdmx"
-    BUNDLE_ID                   "com.hitdmx.hitdmx"
+    BUNDLE_ID                   "com.hitdmx.hitccdmx"
     PLUGIN_MANUFACTURER_CODE    "HtDx"
-    PLUGIN_CODE                 "Hdmx"
+    PLUGIN_CODE                 "Hccd"
     FORMATS                     VST3
-    PRODUCT_NAME                "hitdmx"
-    DESCRIPTION                 "DMX-512 lighting controller as a VST3 plugin"
+    PRODUCT_NAME                "hitccdmx"
+    DESCRIPTION                 "Exposes DMX-512 channels as plain DAW-automatable (CC-style) parameters"
     IS_SYNTH                    FALSE
     NEEDS_MIDI_INPUT            FALSE
     NEEDS_MIDI_OUTPUT           FALSE
@@ -36,24 +36,24 @@ juce_add_plugin(hitdmx
     VST3_CATEGORIES             "Fx" "Tools"
 )
 
-target_sources(hitdmx PRIVATE
+target_sources(hitccdmx PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/GuiParams.cpp
     Source/EnttecProDmx.cpp
 )
 
-target_include_directories(hitdmx PRIVATE
+target_include_directories(hitccdmx PRIVATE
     Source
 )
 
-target_compile_definitions(hitdmx PRIVATE
+target_compile_definitions(hitccdmx PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
 )
 
-target_link_libraries(hitdmx PRIVATE
+target_link_libraries(hitccdmx PRIVATE
     "-framework IOKit"
     "-framework CoreFoundation"
     juce::juce_audio_utils

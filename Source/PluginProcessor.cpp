@@ -1,7 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-namespace hitdmx
+namespace hitccdmx
 {
 
 juce::String HitDmxAudioProcessor::paramIdForChannel (int channel1to512)
@@ -89,5 +89,5 @@ void HitDmxAudioProcessor::parameterChanged (const juce::String& parameterID, fl
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new hitdmx::HitDmxAudioProcessor();
+    return new hitccdmx::HitDmxAudioProcessor();
 }

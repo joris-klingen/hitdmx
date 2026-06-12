@@ -1,8 +1,15 @@
-# hitdmx
+# hitccdmx
 
 A macOS VST3 plugin that exposes a full DMX-512 universe as
 host-automatable parameters, so you can drive lighting from a DAW
 through an **ENTTEC DMX USB Pro**.
+
+The name highlights its role in the hitdmx family: plain CC-style
+channel automation straight to DMX, with no note logic — that lives in
+[hitnotedmx](https://github.com/joris-klingen/hitnotedmx). Formerly
+published as **hitdmx**; renaming gave the plugin a new VST identity
+(plugin code `Hccd`), so DAW sessions saved with the old plugin need
+the channel automation re-pointed at hitccdmx.
 
 This is a refactor and modernisation of
 [spensbot/Garage-Lights](https://github.com/spensbot/Garage-Lights) (GPLv3).
@@ -22,7 +29,7 @@ hardcoded developer paths.
     `AudioSampleBuffer` → `juce::AudioBuffer<float>`.
   - Fonts created via `juce::FontOptions`.
   - All types fully namespace-qualified; plugin code lives in
-    `namespace hitdmx`.
+    `namespace hitccdmx`.
 - **ENTTEC USB Pro driver**: protocol code moved into
   `Source/EnttecProDmx.{h,cpp}`, cleaned up, and freed of its hardcoded
   `C:/Users/Spenser/...` library path. Device I/O no longer uses the
@@ -56,7 +63,7 @@ macOS system frameworks, so the resulting `.vst3` is self-contained
 and links no third-party libraries. You can copy it between machines
 without installing any runtime on the destination.
 
-The VST3 is at `build/hitdmx_artefacts/Release/VST3/hitdmx.vst3`, and
+The VST3 is at `build/hitccdmx_artefacts/Release/VST3/hitccdmx.vst3`, and
 the build also copies it to `~/Library/Audio/Plug-Ins/VST3/`
 automatically so your DAW picks it up on the next rescan.
 
